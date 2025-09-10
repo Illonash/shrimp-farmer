@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Shrimp Runner — @anoma x Shrimpers</title>
+<meta name="description" content="Endless runner for Anoma x Shrimpers. Choose Shrimp or Wizard, jump obstacles, grab bonuses!">
+<style>
+  :root{
+    --bg:#0e1428; --fg:#eaf3ff; --accent:#00ffd0; --danger:#ff6a6a; --good:#ffd54a;
+    --ui:#121a38; --line:#233060;
+  }
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:ui-monospace,Menlo,Consolas,monospace}
+  .wrap{max-width:980px;margin:0 auto;padding:12px;display:flex;flex-direction:column;gap:10px}
+  header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  h1{margin:0;font-size:16px;color:var(--accent);letter-spacing:.4px}
+  .sub{opacity:.8;font-size:12px}
+  .hud{display:flex;gap:10px;flex-wrap:wrap;background:var(--ui);border:1px solid var(--line);padding:8px;border-radius:10px}
+  .hud span{background:#0f1733;border:1px solid var(--line);border-radius:8px;padding:4px 8px}
+  .btns{display:flex;gap:8px;flex-wrap:wrap}
+  button{background:#1a2550;color:var(--fg);border:1px solid #2a3b7b;padding:8px 10px;border-radius:8px;cursor:pointer}
+  button:hover{background:#213064}
+  .charpick{display:flex;gap:10px;align-items:center}
+  .charpick img{width:58px;height:58px;object-fit:contain;background:#0d1533;border:1px solid #223062;border-radius:10px;padding:6px;cursor:pointer;opacity:.8}
+  .charpick img.selected{outline:2px solid var(--accent);opacity:1}
+  canvas{background:linear-gradient(#0d1428 0%,#0d1428 65%,#0a1022 100%);border:1px solid #243363;border-radius:10px;width:100%;height:auto}
+  .touch{display:flex;gap:10px;justify-content:center}
+  .touch button{min-width:90px}
+  footer{opacity:.75;font-size:12px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>🦐 Shrimp Runner — @anoma x Shrimpers</h1>
+      <div class="sub">Choose your hero • Jump/Slide • Beat the high score · #AnomaUpward</div>
+    </div>
+    <div class="btns">
+      <button id="btnPause" title="P">⏸ Pause</button>
+      <button id="btnMute" title="M">🔇 Mute</button>
+      <button id="btnRestart" title="R">🔁 Restart</button>
+      <button id="btnShare" title="Share score">📣 Share</button>
+    </div>
+  </header>
+
+  <div class="hud" role="status" aria-live="polite">
+    <span>Score: <b id="score">0</b></span>
+    <span>Best: <b id="best">0</b></span>
+    <span>Speed: <b id="spd">1.0x</b></span>
+    <span style="flex:1;text-align:right">↑/Space: Jump • ↓: Slide • P: Pause • M: Mute • R: Restart</span>
+  </div>
+
+  <div class="charpick">
+    <strong>Character:</strong>
+    <img id="pickShrimp" src="shrimp.png" alt="Shrimp" title="Shrimp">
+    <img id="pickWizard" src="wizard.png" alt="Wizard" title="Wizard">
+    <span id="pickHint" style="opacity:.8">← click one, then click the canvas to start</span>
+  </div>
+
+  <canvas id="game" width="800" height="360" aria-label="Shrimp Runner game"></canvas>
+
+  <div class="touch">
+    <button id="btnJump">🆙 Jump</button>
+    <button id="btnSlide">⬇️ Slide</button>
+  </div>
+
+  <footer>
+    obstacles hurt, golden cans give bonus • transparent PNGs recommended (shrimp.png & wizard.png in repo root)
+  </footer>
+</div>
+
+<script>
+(() => {
+  // ====== Canvas & UI ======
+  const cvs = document.getElementById('game');
+  const ctx = cvs.getContext('2d');
+  const ui = {
+    score: document.getElementById('score'),
+    best:  document.getElementById('best'),
+    spd:   document.getElementById('spd'),
+    pause: document.getElementById('btnPause'),
+    mute:  document.getElementById('btnMute'),
+    restart: document.getElementById('btnRestart'),
+    share: document.getElementById('btnShare'),
+    jump:  document.getElementById('btnJump'),
+    slide: document.getElementById('btnSlide'),
+    pickShrimp: document.getElementById('pickShrimp'),
+    pickWizard: document.getElementById('pickWizard'),
+    pickHint:   document.getElementById('pickHint')
+  };
+
+  // ====== Audio (tiny beeps) ======
+  const AC = window.AudioContext || window.webkitAudioContext;
+  const actx = AC ? new AC() : null;
+  let muted = false;
+  function beep(f=700,d=0.05,g=0.05,type='square'){
+    if(!actx || muted) return;
+    const o=actx.createOscillator(), ga=actx.createGain();
+    o.type=type; o.frequency.value=f; ga.gain.value=g;
+    o.connect(ga); ga.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime + d);
+  }
+  const sJump =()=>beep(820,0.06,0.05,'triangle');
+  const sSlide=()=>beep(400,0.06,0.05,'sawtooth');
+  const sHit  =()=>beep(220,0.12,0.06,'sawtooth');
+  const sGood =()=>beep(980,0.08,0.06,'triangle');
+  const sClick=()=>beep(680,0.04,0.04,'square');
+
+  // ====== Game State ======
+  const STATE={READY:0,PLAY:1,PAUSE:2,OVER:3};
+  let state = STATE.READY;
+
+  const GROUND = cvs.height - 64;
+
+  // Load sprites
+  const imgShrimp = new Image(); imgShrimp.src = 'shrimp.png';
+  const imgWizard = new Image(); imgWizard.src = 'wizard.png';
+
+  // fallback if image fails
+  imgShrimp.onerror = imgWizard.onerror = () => console.warn('Make sure shrimp.png & wizard.png exist in repo root.');
+
+  let heroImg = imgShrimp; // default selected
+  function select(imgEl, img){
+    heroImg = img;
+    [ui.pickShrimp, ui.pickWizard].forEach(el => el.classList.remove('selected'));
+    imgEl.classList.add('selected');
+  }
+  ui.pickShrimp.addEventListener('click', ()=>{ select(ui.pickShrimp, imgShrimp); sClick(); });
+  ui.pickWizard.addEventListener('click', ()=>{ select(ui.pickWizard, imgWizard); sClick(); });
+
+  // Auto-select shrimp initially
+  ui.pickShrimp.classList.add('selected');
+
+  // Hero physics
+  const hero = {
+    x: 120, y: GROUND-20, w: 86, h: 86, // display size (scaled)
+    vy: 0, onGround: true, sliding:false, slideT:0
+  };
+
+  // World
+  let t=0, speed=220, score=0, best=parseInt(localStorage.getItem('runner_best')||'0',10);
+  ui.best.textContent = best;
+  let spawnTimer=0, bonusTimer=3;
+
+  const obstacles = []; // {x,y,w,h,type}
+  // type: 'rock' | 'weed' | 'can'
+
+  // Controls
+  const keys={};
+  addEventListener('keydown',e=>{
+    keys[e.key.toLowerCase()]=true;
+    if(e.key==='ArrowUp' || e.key===' ') jump();
+    if(e.key==='ArrowDown') slide();
+    if(e.key.toLowerCase()==='p') togglePause();
+    if(e.key.toLowerCase()==='m') toggleMute();
+    if(e.key.toLowerCase()==='r') restart();
+    if(state===STATE.READY && (e.key===' '||e.key==='Enter')) start();
+  });
+  addEventListener('keyup',e=>{
+    keys[e.key.toLowerCase()]=false;
+  });
+  ui.jump.addEventListener('click',()=>jump());
+  ui.slide.addEventListener('pointerdown',e=>{e.preventDefault();slide();});
+  ui.pause.addEventListener('click',()=>togglePause());
+  ui.mute.addEventListener('click',()=>toggleMute());
+  ui.restart.addEventListener('click',()=>restart());
+  ui.share.addEventListener('click',()=>shareScore());
+  cvs.addEventListener('click',()=>{ if(state===STATE.READY) start(); });
+
+  function togglePause(){
+    if(state===STATE.PLAY){ state=STATE.PAUSE; sClick(); }
+    else if(state===STATE.PAUSE){ state=STATE.PLAY; sClick(); }
+  }
+  function toggleMute(){ muted=!muted; ui.mute.textContent=muted?'🔊 Unmute':'🔇 Mute'; sClick(); }
+
+  function start(){
+    if (actx && actx.state==='suspended') actx.resume();
+    state=STATE.PLAY; t=0; speed=220; score=0; spawnTimer=0; bonusTimer=3;
+    obstacles.length=0;
+    hero.y=GROUND-20; hero.vy=0; hero.onGround=true; hero.sliding=false; hero.slideT=0;
+    ui.spd.textContent = (speed/220).toFixed(1)+'x';
+    sClick();
+  }
+  function restart(){ state=STATE.READY; sClick(); }
+  function gameOver(){
+    state=STATE.OVER;
+    best = Math.max(best, Math.floor(score));
+    localStorage.setItem('runner_best', String(best));
+    ui.best.textContent = best;
+  }
+  function jump(){
+    if(state!==STATE.PLAY) return;
+    if(hero.onGround && !hero.sliding){
+      hero.vy = -460; hero.onGround=false; sJump();
+    }
+  }
+  function slide(){
+    if(state!==STATE.PLAY) return;
+    if(hero.onGround && !hero.sliding){
+      hero.sliding=true; hero.slideT=0.6; sSlide();
+    }
+  }
+  function shareScore(){
+    const text = `My score ${Math.floor(score)} on Shrimp Runner — @anoma x Shrimpers #AnomaUpward #ShrimpersNFT`;
+    const url  = location.href;
+    if(navigator.share){ navigator.share({title:'Shrimp Runner', text, url}).catch(()=>{}); }
+    else { window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`,'_blank'); }
+  }
+
+  // Spawn helpers
+  function spawnObstacle(){
+    const r = Math.random();
+    let type='rock', w=34, h=34, y=GROUND-34;
+    if(r<0.33){ type='rock'; w=36; h=36; y=GROUND-36; }
+    else if(r<0.66){ type='weed'; w=28; h=46; y=GROUND-46; }
+    else { type='rock'; w=54; h=28; y=GROUND-28; }
+    obstacles.push({x:cvs.width+40, y, w, h, type, good:false});
+  }
+  function spawnBonus(){
+    // golden can (good)
+    const y = GROUND - (80 + Math.random()*60);
+    obstacles.push({x:cvs.width+40, y, w:28, h:28, type:'can', good:true});
+  }
+
+  // Main loop
+  let last=0;
+  requestAnimationFrame(function loop(ts){
+    requestAnimationFrame(loop);
+    if(!last) last=ts;
+    let dt = Math.min((ts-last)/1000, 0.033);
+    last=ts;
+
+    if(state===STATE.PLAY){
+      t+=dt; score += dt* (speed/22); // scale score with speed
+      ui.score.textContent = Math.floor(score);
+      // Difficulty ramp
+      speed = Math.min(480, 220 + t*14);
+      ui.spd.textContent = (speed/220).toFixed(1)+'x';
+
+      // Spawn
+      spawnTimer -= dt;
+      if(spawnTimer<=0){
+        spawnObstacle();
+        const gap = Math.max(0.6, 1.3 - (speed-220)/200); // faster → tighter
+        spawnTimer = gap;
+      }
+      bonusTimer -= dt;
+      if(bonusTimer<=0){
+        spawnBonus();
+        bonusTimer = 3.5 + Math.random()*2.5;
+      }
+
+      // Move obstacles
+      for(let i=obstacles.length-1;i>=0;i--){
+        const o=obstacles[i];
+        o.x -= speed*dt;
+        if(o.x + o.w < -10) obstacles.splice(i,1);
+      }
+
+      // Hero physics
+      hero.vy += 1400*dt;
+      hero.y  += hero.vy*dt;
+      if(hero.y >= GROUND-20){ hero.y=GROUND-20; hero.vy=0; hero.onGround=true; }
+      // slide box shrink
+      if(hero.sliding){
+        hero.slideT -= dt;
+        if(hero.slideT<=0) hero.sliding=false;
+      }
+
+      // Collisions
+      const hb = heroBounds();
+      for(let i=obstacles.length-1;i>=0;i--){
+        const o=obstacles[i];
+        const ob = {x:o.x,y:o.y,w:o.w,h:o.h};
+        if(overlap(hb, ob)){
+          if(o.good){
+            // collect bonus
+            score += 150;
+            sGood();
+            obstacles.splice(i,1);
+          } else {
+            // hit obstacle
+            sHit();
+            gameOver();
+            break;
+          }
+        }
+      }
+    }
+
+    draw();
+  });
+
+  function heroBounds(){
+    // base display box
+    const w = hero.sliding ? hero.w*0.85 : hero.w*0.7;
+    const h = hero.sliding ? hero.h*0.55 : hero.h*0.7;
+    return { x: hero.x - w/2, y: hero.y - h/2, w, h };
+  }
+
+  function overlap(a,b){ return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y; }
+
+  // ====== Rendering ======
+  function draw(){
+    // sky
+    for(let y=0;y<cvs.height;y+=2){
+      const t=y/cvs.height; ctx.fillStyle=`rgb(${10+12*t|0},${18+10*t|0},${42+34*t|0})`;
+      ctx.fillRect(0,y,cvs.width,2);
+    }
+    // ground
+    ctx.fillStyle="#0a1124"; ctx.fillRect(0,GROUND,cvs.width,cvs.height-GROUND);
+    // lane lines
+    for(let x=0;x<cvs.width;x+=40){
+      ctx.fillStyle="#16224a"; ctx.fillRect(x,GROUND-2,20,2);
+    }
+
+    // obstacles & bonuses
+    obstacles.forEach(o=>{
+      if(o.type==='can'){
+        // golden can
+        ctx.fillStyle="rgba(255,213,74,0.28)";
+        ctx.fillRect(o.x-4,o.y-4,o.w+8,o.h+8);
+        ctx.fillStyle="#ffd54a"; ctx.fillRect(o.x,o.y,o.w,o.h);
+        ctx.fillStyle="#fff1a8"; ctx.fillRect(o.x+5,o.y+6,o.w-10,o.h-12);
+      } else if(o.type==='weed'){
+        ctx.fillStyle="#6aa84f"; roundRect(ctx,o.x,o.y,o.w,o.h,6,true,false);
+        ctx.fillStyle="#8cd585"; roundRect(ctx,o.x+6,o.y+6,o.w-12,o.h-12,4,true,false);
+      } else {
+        ctx.fillStyle="#3a4466"; roundRect(ctx,o.x,o.y,o.w,o.h,6,true,false);
+        ctx.fillStyle="#55618a"; roundRect(ctx,o.x+4,o.y+4,o.w-8,o.h-8,4,true,false);
+      }
+    });
+
+    // hero sprite (scaled)
+    const img = heroImg && heroImg.complete ? heroImg : null;
+    const drawW = hero.w, drawH = hero.h*(hero.sliding?0.75:1);
+    const dy = hero.sliding ? 12 : 0;
+    if(img){
+      ctx.drawImage(img, hero.x - drawW/2, hero.y - drawH/2 + dy, drawW, drawH);
+    } else {
+      // fallback block
+      ctx.fillStyle="#ff9aa2"; ctx.fillRect(hero.x-30, hero.y-30, 60, 60);
+    }
+
+    // UI overlays
+    if(state===STATE.READY) banner("Click canvas or press SPACE/ENTER to start");
+    if(state===STATE.PAUSE) banner("Paused — press P to resume");
+    if(state===STATE.OVER)  banner("Game Over — press R to restart");
+  }
+
+  function banner(text){
+    ctx.fillStyle="rgba(10,17,40,0.92)"; ctx.fillRect(cvs.width/2-220, cvs.height/2-18, 440, 36);
+    ctx.strokeStyle="#243363"; ctx.strokeRect(cvs.width/2-220, cvs.height/2-18, 440, 36);
+    ctx.fillStyle="#eaf3ff"; ctx.font="14px monospace"; ctx.textBaseline="middle";
+    const w = ctx.measureText(text).width;
+    ctx.fillText(text, cvs.width/2 - w/2, cvs.height/2);
+  }
+  function roundRect(ctx,x,y,w,h,r,fill,stroke){
+    if (w<2*r) r=w/2; if(h<2*r) r=h/2;
+    ctx.beginPath();
+    ctx.moveTo(x+r,y);
+    ctx.arcTo(x+w,y,x+w,y+h,r);
+    ctx.arcTo(x+w,y+h,x,y+h,r);
+    ctx.arcTo(x,y+h,x,y,r);
+    ctx.arcTo(x,y,x+w,y,r);
+    ctx.closePath();
+    if(fill) ctx.fill(); if(stroke) ctx.stroke();
+  }
+})();
+</script>
+</body>
+</html>
