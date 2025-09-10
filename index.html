@@ -111,7 +111,8 @@
   const STATE={READY:0,PLAY:1,PAUSE:2,OVER:3};
   let state = STATE.READY;
 
-  const GROUND = cvs.height - 64;
+  const GROUND = cvs.height - 100;
+
 
   // Load sprites
   const imgShrimp = new Image(); imgShrimp.src = 'shrimp.png';
@@ -212,9 +213,9 @@
   function spawnObstacle(){
     const r = Math.random();
     let type='rock', w=34, h=34, y=GROUND-34;
-    if(r<0.33){ type='rock'; w=36; h=36; y=GROUND-36; }
-    else if(r<0.66){ type='weed'; w=28; h=46; y=GROUND-46; }
-    else { type='rock'; w=54; h=28; y=GROUND-28; }
+    if(r<0.33){ type='rock'; w=24; h=24; y=GROUND-24; }
+else if(r<0.66){ type='weed'; w=20; h=32; y=GROUND-32; }
+else { type='rock'; w=36; h=20; y=GROUND-20; }
     obstacles.push({x:cvs.width+40, y, w, h, type, good:false});
   }
   function spawnBonus(){
