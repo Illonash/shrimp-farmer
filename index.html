@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Shrimp Runner — Anoma x Shrimpers</title>
+<title>Shrimp Runner — @anoma x Shrimpers</title>
 <meta name="description" content="Endless runner for Anoma x Shrimpers. Choose Shrimp or Wizard, jump obstacles, grab bonuses!">
 <style>
   :root{
@@ -33,7 +33,7 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>🦐 Shrimp Runner — Anoma x Shrimpers</h1>
+      <h1>🦐 Shrimp Runner — @anoma x Shrimpers</h1>
       <div class="sub">Choose your hero • Jump/Slide • Beat the high score · #AnomaUpward</div>
     </div>
     <div class="btns">
@@ -87,7 +87,6 @@
     slide: document.getElementById('btnSlide'),
     pickShrimp: document.getElementById('pickShrimp'),
     pickWizard: document.getElementById('pickWizard'),
-    pickHint:   document.getElementById('pickHint')
   };
 
   // ====== Audio (tiny beeps) ======
@@ -111,41 +110,44 @@
   const STATE={READY:0,PLAY:1,PAUSE:2,OVER:3};
   let state = STATE.READY;
 
-  const GROUND = cvs.height - 100;
-
+  // Ground line (naik-turunkan sesuai selera)
+  const GROUND = cvs.height - 100; // lebih tinggi dari versi awal agar visual pas
 
   // Load sprites
   const imgShrimp = new Image(); imgShrimp.src = 'shrimp.png';
   const imgWizard = new Image(); imgWizard.src = 'wizard.png';
 
-  // fallback if image fails
   imgShrimp.onerror = imgWizard.onerror = () => console.warn('Make sure shrimp.png & wizard.png exist in repo root.');
 
-  let heroImg = imgShrimp; // default selected
-  function select(imgEl, img){
+  let heroImg = imgShrimp; // default
+  function select(el, img){
     heroImg = img;
-    [ui.pickShrimp, ui.pickWizard].forEach(el => el.classList.remove('selected'));
-    imgEl.classList.add('selected');
+    [document.getElementById('pickShrimp'), document.getElementById('pickWizard')].forEach(n=>n.classList.remove('selected'));
+    el.classList.add('selected'); sClick();
   }
-  ui.pickShrimp.addEventListener('click', ()=>{ select(ui.pickShrimp, imgShrimp); sClick(); });
-  ui.pickWizard.addEventListener('click', ()=>{ select(ui.pickWizard, imgWizard); sClick(); });
+  document.getElementById('pickShrimp').addEventListener('click',()=>select(document.getElementById('pickShrimp'), imgShrimp));
+  document.getElementById('pickWizard').addEventListener('click',()=>select(document.getElementById('pickWizard'), imgWizard));
+  document.getElementById('pickShrimp').classList.add('selected');
 
-  // Auto-select shrimp initially
-  ui.pickShrimp.classList.add('selected');
-
-  // Hero physics
+  // ====== Hero (BASELINE) ======
+  // y = posisi kaki (baseline), selalu di/di atas GROUND
   const hero = {
-    x: 120, y: GROUND-20, w: 86, h: 86, // display size (scaled)
-    vy: 0, onGround: true, sliding:false, slideT:0
+    x: 140,
+    y: GROUND,   // baseline
+    w: 86,
+    h: 86,
+    vy: 0,
+    onGround: true,
+    sliding: false,
+    slideT: 0
   };
 
-  // World
+  // World & scoring
   let t=0, speed=220, score=0, best=parseInt(localStorage.getItem('runner_best')||'0',10);
   ui.best.textContent = best;
   let spawnTimer=0, bonusTimer=3;
 
-  const obstacles = []; // {x,y,w,h,type}
-  // type: 'rock' | 'weed' | 'can'
+  const obstacles = []; // {x,y,w,h,type,good}
 
   // Controls
   const keys={};
@@ -158,30 +160,25 @@
     if(e.key.toLowerCase()==='r') restart();
     if(state===STATE.READY && (e.key===' '||e.key==='Enter')) start();
   });
-  addEventListener('keyup',e=>{
-    keys[e.key.toLowerCase()]=false;
-  });
-  ui.jump.addEventListener('click',()=>jump());
-  ui.slide.addEventListener('pointerdown',e=>{e.preventDefault();slide();});
-  ui.pause.addEventListener('click',()=>togglePause());
-  ui.mute.addEventListener('click',()=>toggleMute());
-  ui.restart.addEventListener('click',()=>restart());
-  ui.share.addEventListener('click',()=>shareScore());
+  addEventListener('keyup',e=>{ keys[e.key.toLowerCase()]=false; });
+
+  document.getElementById('btnJump').addEventListener('click',()=>jump());
+  document.getElementById('btnSlide').addEventListener('pointerdown',e=>{e.preventDefault();slide();});
+  document.getElementById('btnPause').addEventListener('click',()=>togglePause());
+  document.getElementById('btnMute').addEventListener('click',()=>toggleMute());
+  document.getElementById('btnRestart').addEventListener('click',()=>restart());
+  document.getElementById('btnShare').addEventListener('click',()=>shareScore());
   cvs.addEventListener('click',()=>{ if(state===STATE.READY) start(); });
 
-  function togglePause(){
-    if(state===STATE.PLAY){ state=STATE.PAUSE; sClick(); }
-    else if(state===STATE.PAUSE){ state=STATE.PLAY; sClick(); }
-  }
-  function toggleMute(){ muted=!muted; ui.mute.textContent=muted?'🔊 Unmute':'🔇 Mute'; sClick(); }
+  function togglePause(){ if(state===STATE.PLAY){ state=STATE.PAUSE; sClick(); } else if(state===STATE.PAUSE){ state=STATE.PLAY; sClick(); } }
+  function toggleMute(){ muted=!muted; document.getElementById('btnMute').textContent=muted?'🔊 Unmute':'🔇 Mute'; sClick(); }
 
   function start(){
     if (actx && actx.state==='suspended') actx.resume();
     state=STATE.PLAY; t=0; speed=220; score=0; spawnTimer=0; bonusTimer=3;
     obstacles.length=0;
-    hero.y=GROUND-20; hero.vy=0; hero.onGround=true; hero.sliding=false; hero.slideT=0;
-    ui.spd.textContent = (speed/220).toFixed(1)+'x';
-    sClick();
+    hero.y=GROUND; hero.vy=0; hero.onGround=true; hero.sliding=false; hero.slideT=0;
+    ui.spd.textContent = (speed/220).toFixed(1)+'x'; sClick();
   }
   function restart(){ state=STATE.READY; sClick(); }
   function gameOver(){
@@ -193,13 +190,17 @@
   function jump(){
     if(state!==STATE.PLAY) return;
     if(hero.onGround && !hero.sliding){
-      hero.vy = -460; hero.onGround=false; sJump();
+      hero.vy = -460;      // ke atas (negatif)
+      hero.onGround = false;
+      sJump();
     }
   }
   function slide(){
     if(state!==STATE.PLAY) return;
     if(hero.onGround && !hero.sliding){
-      hero.sliding=true; hero.slideT=0.6; sSlide();
+      hero.sliding = true;
+      hero.slideT = 0.6;
+      sSlide();
     }
   }
   function shareScore(){
@@ -209,17 +210,16 @@
     else { window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`,'_blank'); }
   }
 
-  // Spawn helpers
+  // Spawners
   function spawnObstacle(){
     const r = Math.random();
-    let type='rock', w=34, h=34, y=GROUND-34;
-    if(r<0.33){ type='rock'; w=24; h=24; y=GROUND-24; }
-else if(r<0.66){ type='weed'; w=20; h=32; y=GROUND-32; }
-else { type='rock'; w=36; h=20; y=GROUND-20; }
+    let type='rock', w=24, h=24, y=GROUND-24;
+    if(r<0.33){ type='rock'; w=26; h=26; y=GROUND-26; }
+    else if(r<0.66){ type='weed'; w=22; h=32; y=GROUND-32; }
+    else { type='rock'; w=36; h=20; y=GROUND-20; }
     obstacles.push({x:cvs.width+40, y, w, h, type, good:false});
   }
   function spawnBonus(){
-    // golden can (good)
     const y = GROUND - (80 + Math.random()*60);
     obstacles.push({x:cvs.width+40, y, w:28, h:28, type:'can', good:true});
   }
@@ -233,8 +233,9 @@ else { type='rock'; w=36; h=20; y=GROUND-20; }
     last=ts;
 
     if(state===STATE.PLAY){
-      t+=dt; score += dt* (speed/22); // scale score with speed
+      t+=dt; score += dt* (speed/22);
       ui.score.textContent = Math.floor(score);
+
       // Difficulty ramp
       speed = Math.min(480, 220 + t*14);
       ui.spd.textContent = (speed/220).toFixed(1)+'x';
@@ -243,14 +244,11 @@ else { type='rock'; w=36; h=20; y=GROUND-20; }
       spawnTimer -= dt;
       if(spawnTimer<=0){
         spawnObstacle();
-        const gap = Math.max(0.6, 1.3 - (speed-220)/200); // faster → tighter
+        const gap = Math.max(0.7, 1.3 - (speed-220)/200);
         spawnTimer = gap;
       }
       bonusTimer -= dt;
-      if(bonusTimer<=0){
-        spawnBonus();
-        bonusTimer = 3.5 + Math.random()*2.5;
-      }
+      if(bonusTimer<=0){ spawnBonus(); bonusTimer = 3.5 + Math.random()*2.5; }
 
       // Move obstacles
       for(let i=obstacles.length-1;i>=0;i--){
@@ -259,33 +257,31 @@ else { type='rock'; w=36; h=20; y=GROUND-20; }
         if(o.x + o.w < -10) obstacles.splice(i,1);
       }
 
-      // Hero physics
+      // ====== Physics (BASELINE) ======
       hero.vy += 1400*dt;
       hero.y  += hero.vy*dt;
-      if(hero.y >= GROUND-20){ hero.y=GROUND-20; hero.vy=0; hero.onGround=true; }
-      // slide box shrink
-      if(hero.sliding){
-        hero.slideT -= dt;
-        if(hero.slideT<=0) hero.sliding=false;
+
+      // Clamp ke lantai (baseline = GROUND)
+      if(hero.y >= GROUND){
+        hero.y = GROUND;
+        hero.vy = 0;
+        hero.onGround = true;
       }
 
-      // Collisions
+      // slide timer
+      if(hero.sliding){
+        hero.slideT -= dt;
+        if(hero.slideT <= 0) hero.sliding = false;
+      }
+
+      // Collisions (pakai bounding box dari baseline)
       const hb = heroBounds();
       for(let i=obstacles.length-1;i>=0;i--){
         const o=obstacles[i];
         const ob = {x:o.x,y:o.y,w:o.w,h:o.h};
         if(overlap(hb, ob)){
-          if(o.good){
-            // collect bonus
-            score += 150;
-            sGood();
-            obstacles.splice(i,1);
-          } else {
-            // hit obstacle
-            sHit();
-            gameOver();
-            break;
-          }
+          if(o.good){ score += 150; sGood(); obstacles.splice(i,1); }
+          else { sHit(); gameOver(); break; }
         }
       }
     }
@@ -294,12 +290,10 @@ else { type='rock'; w=36; h=20; y=GROUND-20; }
   });
 
   function heroBounds(){
-    // base display box
-    const w = hero.sliding ? hero.w*0.85 : hero.w*0.7;
-    const h = hero.sliding ? hero.h*0.55 : hero.h*0.7;
-    return { x: hero.x - w/2, y: hero.y - h/2, w, h };
+    const w = hero.sliding ? hero.w * 0.85 : hero.w * 0.7;
+    const h = hero.sliding ? hero.h * 0.55 : hero.h * 0.7;
+    return { x: hero.x - w/2, y: hero.y - h, w, h }; // dari kaki (baseline) ke atas
   }
-
   function overlap(a,b){ return a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y; }
 
   // ====== Rendering ======
@@ -319,7 +313,6 @@ else { type='rock'; w=36; h=20; y=GROUND-20; }
     // obstacles & bonuses
     obstacles.forEach(o=>{
       if(o.type==='can'){
-        // golden can
         ctx.fillStyle="rgba(255,213,74,0.28)";
         ctx.fillRect(o.x-4,o.y-4,o.w+8,o.h+8);
         ctx.fillStyle="#ffd54a"; ctx.fillRect(o.x,o.y,o.w,o.h);
@@ -333,18 +326,20 @@ else { type='rock'; w=36; h=20; y=GROUND-20; }
       }
     });
 
-    // hero sprite (scaled)
-    const img = heroImg && heroImg.complete ? heroImg : null;
-    const drawW = hero.w, drawH = hero.h*(hero.sliding?0.75:1);
-    const dy = hero.sliding ? 12 : 0;
-    if(img){
-      ctx.drawImage(img, hero.x - drawW/2, hero.y - drawH/2 + dy, drawW, drawH);
+    // ====== Draw hero (BOTTOM-ALIGNED to baseline) ======
+    const drawW = hero.w;
+    const drawH = hero.h * (hero.sliding ? 0.75 : 1);
+    const slideOffset = hero.sliding ? 12 : 0; // sedikit turun saat slide
+    const drawX = hero.x - drawW / 2;
+    const drawY = hero.y - drawH + slideOffset; // kaki = baseline
+
+    if(heroImg && heroImg.complete){
+      ctx.drawImage(heroImg, drawX, drawY, drawW, drawH);
     } else {
-      // fallback block
-      ctx.fillStyle="#ff9aa2"; ctx.fillRect(hero.x-30, hero.y-30, 60, 60);
+      ctx.fillStyle = "#ff9aa2"; ctx.fillRect(drawX, drawY, drawW, drawH);
     }
 
-    // UI overlays
+    // overlays
     if(state===STATE.READY) banner("Click canvas or press SPACE/ENTER to start");
     if(state===STATE.PAUSE) banner("Paused — press P to resume");
     if(state===STATE.OVER)  banner("Game Over — press R to restart");
