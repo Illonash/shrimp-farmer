@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Shrimp Runner — @anoma x Shrimpers</title>
+<title>Shrimp Runner — Anoma x Shrimpers</title>
 <meta name="description" content="Endless runner for Anoma x Shrimpers. Choose Shrimp or Wizard, jump obstacles, grab bonuses!">
 <meta property="og:title" content="Shrimp Runner — by @illonashanum">
 <meta property="og:description" content="Endless runner for @anoma x Shrimpers. Choose Shrimp or Wizard, jump obstacles, grab bonuses!">
@@ -26,7 +26,6 @@
   canvas{background:linear-gradient(#0d1428 0%,#0d1428 65%,#0a1022 100%);border:1px solid #243363;border-radius:10px;width:100%;height:auto}
   .touch{display:flex;gap:10px;justify-content:center}
   .touch button{min-width:90px}
-  footer{opacity:.75;font-size:12px}
   a.link{color:#00ffd0;text-decoration:none}
 </style>
 </head>
@@ -34,10 +33,10 @@
 <div class="wrap">
   <header>
     <div>
-      <h1>🦐 Shrimp Runner — @anoma x Shrimpers</h1>
+      <h1>🦐 Shrimp Runner — Anoma x Shrimpers</h1>
       <div class="sub">
         Choose your hero • Jump obstacles • Beat the high score · #AnomaUpward<br>
-        creator: <a class="link" href="https://twitter.com/illonashanum" target="_blank">@illonashanum</a>
+        creator: <a class="link" href="https://twitter.com/illonashanum" target="_blank" rel="noopener">@illonashanum</a>
       </div>
     </div>
     <div class="btns">
@@ -48,11 +47,11 @@
     </div>
   </header>
 
-  <div class="hud">
+  <div class="hud" role="status" aria-live="polite">
     <span>Score: <b id="score">0</b></span>
     <span>Best: <b id="best">0</b></span>
     <span>Speed: <b id="spd">1.0x</b></span>
-    <span style="flex:1;text-align:right">↑/Space: Jump • P: Pause • M: Mute • R: Restart</span>
+    <span style="flex:1;text-align:right">↑/Space: Jump • P: Pause • M: Mute • R: Restart • H: Show hitboxes</span>
   </div>
 
   <div class="charpick">
@@ -62,15 +61,11 @@
     <span style="opacity:.8">← click one, then click the canvas to start</span>
   </div>
 
-  <canvas id="game" width="800" height="360"></canvas>
+  <canvas id="game" width="800" height="360" aria-label="Shrimp Runner game"></canvas>
 
   <div class="touch">
     <button id="btnJump">🆙 Jump</button>
   </div>
-
-  <footer>
-    obstacles hurt, golden cans give bonus • transparent PNGs recommended (shrimp.png & wizard.png in repo root)
-  </footer>
 </div>
 
 <script>
@@ -111,6 +106,12 @@
   let state = STATE.READY;
   const GROUND = cvs.height - 100;
 
+  // Countdown
+  let countdown = 0; // detik
+
+  // Debug hitbox
+  let showHit = false;
+
   // Sprites
   const imgShrimp = new Image(); imgShrimp.src = 'shrimp.png';
   const imgWizard = new Image(); imgWizard.src = 'wizard.png';
@@ -131,6 +132,8 @@
   ui.best.textContent = best;
   let spawnTimer=0, bonusTimer=3;
   const obstacles = [];
+
+  // Parallax
   const hillsA=[], hillsB=[], clouds=[];
   for(let i=0;i<6;i++) hillsA.push(makeHill(Math.random()*cvs.width, 200+Math.random()*40, 0.6));
   for(let i=0;i<5;i++) hillsB.push(makeHill(Math.random()*cvs.width, 260+Math.random()*40, 0.9));
@@ -139,10 +142,12 @@
 
   // Controls
   addEventListener('keydown',e=>{
+    const k=e.key.toLowerCase();
     if(e.key==='ArrowUp'||e.key===' '){ jump(); }
-    if(e.key.toLowerCase()==='p') togglePause();
-    if(e.key.toLowerCase()==='m') toggleMute();
-    if(e.key.toLowerCase()==='r') restart();
+    if(k==='p') togglePause();
+    if(k==='m') toggleMute();
+    if(k==='r') restart();
+    if(k==='h') showHit=!showHit;
     if(state===STATE.READY && (e.key===' '||e.key==='Enter')) start();
   });
   ui.jump.addEventListener('click',()=>jump());
@@ -159,6 +164,7 @@
     if (actx && actx.state==='suspended') actx.resume();
     state=STATE.PLAY; t=0; speed=220; score=0; spawnTimer=0; bonusTimer=3;
     obstacles.length=0; hero.y=GROUND; hero.vy=0; hero.onGround=true;
+    countdown = 1.8; // 3..2..1..GO!
     ui.spd.textContent = (speed/220).toFixed(1)+'x'; sClick();
   }
   function restart(){ state=STATE.READY; sClick(); }
@@ -168,12 +174,20 @@
     localStorage.setItem('runner_best', String(best));
     ui.best.textContent = best;
   }
-  function jump(){ if(state!==STATE.PLAY) return; if(hero.onGround){ hero.vy=-460; hero.onGround=false; sJump(); } }
+  function jump(){ if(state!==STATE.PLAY) return; if(hero.onGround && countdown<=0){ hero.vy=-460; hero.onGround=false; sJump(); } }
   function shareScore(){
     const text = `My score ${Math.floor(score)} on Shrimp Runner — @anoma x Shrimpers by @illonashanum #AnomaUpward #ShrimpersNFT`;
     const url  = location.href;
     if(navigator.share){ navigator.share({title:'Shrimp Runner', text, url}).catch(()=>{}); }
     else { window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`,'_blank'); }
+  }
+
+  // Helpers
+  function rectsOverlap(a,b){ return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y; }
+  function heroBounds(){
+    const w = hero.w * 0.55; // lebih kecil = lebih fair
+    const h = hero.h * 0.65;
+    return { x: hero.x - w/2, y: hero.y - h, w, h }; // baseline → ke atas
   }
 
   function spawnObstacle(){
@@ -196,30 +210,40 @@
     let dt=Math.min((ts-last)/1000,0.033); last=ts;
 
     if(state===STATE.PLAY){
-      t+=dt; score += dt*(speed/22); ui.score.textContent=Math.floor(score);
-      speed=Math.min(480,220+t*14); ui.spd.textContent=(speed/220).toFixed(1)+'x';
+      const frozen = countdown > 0;
+      if(countdown>0) countdown -= dt;
 
-      spawnTimer -= dt; if(spawnTimer<=0){ spawnObstacle(); spawnTimer=Math.max(0.7,1.3-(speed-220)/200); }
-      bonusTimer -= dt; if(bonusTimer<=0){ spawnBonus(); bonusTimer=3.5+Math.random()*2.5; }
-      obstacles.forEach(o=>o.x-=speed*dt);
-      for(let i=obstacles.length-1;i>=0;i--){ if(obstacles[i].x+obstacles[i].w<-10) obstacles.splice(i,1); }
+      if(!frozen){
+        t+=dt; score += dt*(speed/22); ui.score.textContent=Math.floor(score);
+        speed=Math.min(480,220+t*14); ui.spd.textContent=(speed/220).toFixed(1)+'x';
 
-      hero.vy+=1400*dt; hero.y+=hero.vy*dt;
-      if(hero.y>=GROUND){ hero.y=GROUND; hero.vy=0; hero.onGround=true; }
+        // spawn & move
+        spawnTimer -= dt; if(spawnTimer<=0){ spawnObstacle(); spawnTimer=Math.max(0.7,1.3-(speed-220)/200); }
+        bonusTimer -= dt; if(bonusTimer<=0){ spawnBonus(); bonusTimer=3.5+Math.random()*2.5; }
+        obstacles.forEach(o=>o.x-=speed*dt);
+        for(let i=obstacles.length-1;i>=0;i--){ if(obstacles[i].x+obstacles[i].w<-10) obstacles.splice(i,1); }
 
-      const hb={x:hero.x-hero.w*0.35,y:hero.y-hero.h*0.7,w:hero.w*0.7,h:hero.h*0.7};
-      for(let i=obstacles.length-1;i>=0;i--){
-        const o=obstacles[i];
-        if(hb.x<hb.x+hb.w && hb.x+hb.w>o.x && hb.y<hb.y+hb.h && hb.y+hb.h>o.y){
-          if(o.good){ score+=150; sGood(); obstacles.splice(i,1); }
-          else { sHit(); gameOver(); break; }
+        // physics
+        hero.vy+=1400*dt; hero.y+=hero.vy*dt;
+        if(hero.y>=GROUND){ hero.y=GROUND; hero.vy=0; hero.onGround=true; }
+
+        // collisions (with forgiveness)
+        const hb = heroBounds();
+        for(let i=obstacles.length-1;i>=0;i--){
+          const o=obstacles[i];
+          const ob = { x:o.x+2, y:o.y+2, w:o.w-4, h:o.h-4 };
+          if(rectsOverlap(hb, ob)){
+            if(o.good){ score+=150; sGood(); obstacles.splice(i,1); }
+            else { sHit(); gameOver(); break; }
+          }
         }
-      }
 
-      const vA=speed*0.15,vB=speed*0.3,vC=speed*0.18;
-      hillsA.forEach(h=>{h.x-=vA*dt;if(h.x+h.w<-20)h.x=cvs.width+80;});
-      hillsB.forEach(h=>{h.x-=vB*dt;if(h.x+h.w<-20)h.x=cvs.width+80;});
-      clouds.forEach(c=>{c.x-=vC*dt;if(c.x<-c.w-20)c.x=cvs.width+20;});
+        // parallax
+        const vA=speed*0.15,vB=speed*0.3,vC=speed*0.18;
+        hillsA.forEach(h=>{h.x-=vA*dt;if(h.x+h.w<-20)h.x=cvs.width+80;});
+        hillsB.forEach(h=>{h.x-=vB*dt;if(h.x+h.w<-20)h.x=cvs.width+80;});
+        clouds.forEach(c=>{c.x-=vC*dt;if(c.x<-c.w-20)c.x=cvs.width+20;});
+      }
     }
     draw();
   });
@@ -253,10 +277,31 @@
     if(state===STATE.READY) banner("Click canvas or press SPACE/ENTER to start");
     if(state===STATE.PAUSE) banner("Paused — press P to resume");
     if(state===STATE.OVER)  banner("Game Over — press R to restart");
+
+    if(countdown>0){
+      const n=Math.ceil(countdown);
+      banner(n>0? String(n): "GO!");
+    }
+
+    // debug hitboxes (toggle: H)
+    if(showHit){
+      const hb = heroBounds();
+      ctx.strokeStyle = '#00ffd0'; ctx.strokeRect(hb.x, hb.y, hb.w, hb.h);
+      obstacles.forEach(o=>{
+        const ob={x:o.x+2,y:o.y+2,w:o.w-4,h:o.h-4};
+        ctx.strokeStyle = (o.type==='can') ? '#ffd54a' : '#ff6a6a';
+        ctx.strokeRect(ob.x, ob.y, ob.w, ob.h);
+      });
+    }
   }
 
   function mountain(x,baseY,w,h){ ctx.beginPath(); ctx.moveTo(x,baseY); ctx.lineTo(x+w*0.5,baseY-h); ctx.lineTo(x+w,baseY); ctx.closePath(); ctx.fill(); }
-  function banner(text){ ctx.fillStyle="rgba(10,17,40,0.92)"; ctx.fillRect(cvs.width/2-220,cvs.height/2-18,440,36); ctx.fillStyle="#eaf3ff"; ctx.font="14px monospace"; ctx.textBaseline="middle"; const w=ctx.measureText(text).width; ctx.fillText(text,cvs.width/2-w/2,cvs.height/2); }
+  function banner(text){
+    ctx.fillStyle="rgba(10,17,40,0.92)"; ctx.fillRect(cvs.width/2-120, cvs.height/2-18, 240, 36);
+    ctx.strokeStyle="#243363"; ctx.strokeRect(cvs.width/2-120, cvs.height/2-18, 240, 36);
+    ctx.fillStyle="#eaf3ff"; ctx.font="14px monospace"; ctx.textBaseline="middle";
+    const w=ctx.measureText(text).width; ctx.fillText(text, cvs.width/2 - w/2, cvs.height/2);
+  }
 })();
 </script>
 </body>
