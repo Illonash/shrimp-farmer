@@ -125,7 +125,8 @@
   ui.pickWizard.addEventListener('click',()=>select(ui.pickWizard, imgWizard));
   ui.pickShrimp.classList.add('selected');
 
-  const hero = { x:140, y:GROUND, w:86, h:86, vy:0, onGround:true };
+  const hero = { x:140, y:GROUND, w:48, h:48, vy:0, onGround:true };
+
 
   // World
   let t=0, speed=220, score=0, best=parseInt(localStorage.getItem('runner_best')||'0',10);
